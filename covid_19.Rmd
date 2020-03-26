@@ -1,0 +1,387 @@
+---
+title: "Covid 19 Infection and Death Rates"
+output: html_notebook
+---
+
+
+```{r, include=F}
+library(rmarkdown)
+library(knitr)
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(gridExtra)
+library(broom)
+```
+
+```{r, include=F}
+knitr::opts_chunk$set(
+  fig.width=12
+)
+```
+
+
+
+# Load Data from Johns Hopkins
+```{r}
+covid_infections_raw = read.csv(
+  file=url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"),
+  header=T,
+  stringsAsFactors=F,
+  check.names = T
+)
+
+covid_deaths_raw = read.csv(
+  file=url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"),
+  header=T,
+  stringsAsFactors=F,
+  check.names = T
+)
+```
+
+# Format data
+Data comes with dates as columns and hierarchical index columns. US statistics must be aggregated from individual states, and World statistics by aggregating ALL counts. The transposed data has dates as rows as would be the proper "tidy" format.
+```{r}
+covid_infections_world = 
+  covid_infections_raw %>%
+  select(starts_with("X")) %>%
+  summarize_all(sum) %>%
+  set_rownames('World') %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(
+    Date =  
+      str_remove(Date, "X") %>% 
+      as.Date(format="%m.%d.%y")
+  ) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  mutate(
+    days = as.numeric(Date)-as.numeric(min(Date))
+  )
+
+covid_deaths_world = 
+  covid_deaths_raw %>%
+  select(starts_with("X")) %>%
+  summarize_all(sum) %>%
+  set_rownames('World') %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(
+    Date =
+      str_remove(Date, "X") %>% 
+      as.Date(format="%m.%d.%y")
+  ) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  mutate(days=as.numeric(Date)-as.numeric(min(Date))) 
+
+covid_infections =
+  covid_infections_raw %>%
+  select(Country.Region, starts_with("X")) %>%
+  group_by(Country.Region) %>%
+  summarize_all(sum) %>%
+  mutate(Country.Region = make.names(Country.Region)) %>%
+  column_to_rownames("Country.Region") %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(Date =  str_remove(Date, "X") %>% as.Date(format="%m.%d.%y")) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  ### Add In World
+  inner_join(covid_infections_world, by="Date") %>%
+  mutate(
+    days = 
+      difftime(Date, min(Date), units="days") %>%
+      as.numeric()
+  )
+
+covid_deaths =
+  covid_deaths_raw %>%
+  select(Country.Region, starts_with("X")) %>%
+  group_by(Country.Region) %>%
+  summarize_all(sum) %>%
+  mutate(Country.Region = make.names(Country.Region)) %>%
+  column_to_rownames("Country.Region") %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(Date =  str_remove(Date, "X") %>% as.Date(format="%m.%d.%y")) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  ### Add In World
+  inner_join(covid_deaths_world, by="Date") %>%
+  mutate(
+    days = 
+      difftime(Date, min(Date), units="days") %>%
+      as.numeric()
+  )
+```
+
+# Plot infection rates
+This plot shows a time series of counts since March 1 as well as the entire date range with a log-scale for the y-axis (counts). I chose March 1 because that is the point where the US seemed to enter an exponential phase.
+```{r, fig.width=12}
+p1 = covid_infections %>%
+  filter(Date > as.Date('2020-03-10')) %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Infected", -Date) %>%
+  ggplot(aes(x=Date, y=Infected, color=Country)) +
+  # geom_line() + 
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10() +
+  geom_smooth(method='lm', se=F)
+
+p2 = covid_infections %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Infected", -Date) %>%
+  ggplot(aes(x=Date, y=Infected, color=Country)) +
+  geom_line() +
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10()
+
+grid.arrange(p1, p2,
+  top = sprintf("Covid 19 Infection Rates -- %s", Sys.Date())
+  )
+```
+# Plot death rates
+Same as above but for deaths.
+```{r, fig.width=12}
+p1 = covid_deaths %>%
+  filter(Date > as.Date('2020-03-10')) %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Deceased", -Date) %>%
+  ggplot(aes(x=Date, y=Deceased, color=Country)) +
+  # geom_line() + 
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10() +
+  geom_smooth(method='lm', se=F)
+
+p2 = covid_deaths %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Deceased", -Date) %>%
+  ggplot(aes(x=Date, y=Deceased, color=Country)) +
+  geom_line() +
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10()
+
+grid.arrange(p1, p2,
+  top = sprintf("Covid 19 Death Rates -- %s", Sys.Date())
+  )
+```
+
+# Calculate Doubling Times
+I will use a GLM model to calculate a running 10-day 10-folding and doubling time for both infections and deaths.
+## Functions
+```{r}
+getRunningDoublingTime = function(
+  data,
+  y,
+  from=as.Date(character()),
+  to=as.Date(character()),
+  lag=0
+)
+{
+  doubling_times = data.frame(
+    Date=as.Date(character()),
+    y=as.numeric(),
+    ymin = as.numeric(),
+    ymax = as.numeric()
+  )
+  
+  from = as.Date(from) 
+  to = as.Date(to)
+  
+  # print(sprintf("from: %s  to: %s", from, to))
+
+  for (start in (from-lag+1):(to-lag+2))
+  {
+    start = as.Date(start, origin="1970-01-01")
+    end = as.Date(start+lag-1)
+      
+    # print(sprintf("Date range: %s to %s", start, end))
+    
+    formula_string = paste0(y, " ~ as.numeric(Date)")
+   
+    fit = 
+      data %>%
+      filter(start <= Date & Date <= end) %>%
+      glm(
+        formula = as.formula(formula_string),
+        family = gaussian(link = "log"), 
+        data = .
+      )
+    
+    results = 
+      tidy(fit, conf.int=T) %>%
+      filter(term=='as.numeric(Date)') %>% 
+      mutate_if(is.numeric, ~log(2)/.)
+    
+    doubling_time = results$estimate
+    conf_low = results$conf.high
+    conf_high = results$conf.low
+
+    doubling_times %<>%
+      add_row(
+        Date=end, 
+        y=doubling_time,
+        ymin=conf_low,
+        ymax=conf_high
+      )
+  }
+  
+  return(doubling_times)
+}
+```
+
+## Assemble Data
+```{r}
+lag = 7
+
+from = "2020-03-7"
+to = "2020-03-24"
+
+covid_infection_folding = data.frame(
+  Date = seq(as.Date(from), as.Date(to), by="day")
+)
+
+covid_infection_folding %<>%
+  inner_join(
+    getRunningDoublingTime(
+      covid_infections,
+      from=from,
+      to=to,
+      y="US",
+      lag=lag
+    ) %>% 
+      rename(US_Infections=y, US_Infections_low=ymin, US_Infections_high=ymax) ,
+    by="Date"
+  ) %>%
+  inner_join(
+    getRunningDoublingTime(
+      covid_infections,
+      from=from,
+      to=to,
+      y="World",
+      lag=lag
+    ) %>%
+    rename(World_Infections=y, World_Infections_low=ymin, World_Infections_high=ymax),
+    by="Date"
+  ) %>%
+  inner_join(
+    getRunningDoublingTime(
+      covid_deaths,
+      from=from,
+      to=to,
+      y="US",
+      lag=lag
+    ) %>%
+    rename(US_Deaths=y, US_Deaths_low=ymin, US_Deaths_high=ymax),
+    by="Date"
+  ) %>%
+  inner_join(
+    getRunningDoublingTime(
+      covid_deaths,
+      from=from,
+      to=to,
+      y="World",
+      lag=lag
+    ) %>%
+    rename(World_Deaths=y, World_Deaths_low=ymin, World_Deaths_high=ymax),
+    by="Date"
+  )
+```
+
+# Plot
+## US vs World Infections
+```{r}
+covid_infection_folding %>%
+  ggplot() + 
+  geom_smooth(aes(x=Date, y=US_Infections, color="US Infection Doubling Time")) +
+  geom_smooth(aes(x=Date, y=World_Infections, color="World Infection Doubling Time"))
+```
+
+## US vs World Deaths
+```{r}
+covid_infection_folding %>%
+  ggplot() + 
+  geom_point(aes(x=Date, y=US_Deaths, color="US Infection Doubling Time")) +
+  geom_point(aes(x=Date, y=World_Deaths, color="World Infection Doubling Time")) + 
+  geom_smooth(aes(x=Date, y=US_Deaths, color="US Infection Doubling Time")) +
+  geom_smooth(aes(x=Date, y=World_Deaths, color="World Infection Doubling Time"))
+```
+
+## US Infections and Deaths
+```{r}
+covid_infection_folding %>%
+  ggplot() + 
+  geom_point(aes(x=Date, y=US_Infections, color="US Infections")) +
+  geom_point(aes(x=Date, y=US_Deaths, color="US Deaths")) + 
+  geom_smooth(aes(x=Date, y=US_Infections, color="US Infections")) +
+  geom_smooth(aes(x=Date, y=US_Deaths, color="US Deaths")) +
+  labs(y="Doubling Time in Days")
+```
+
+## World Infections and Deaths
+```{r}
+covid_infection_folding %>%
+  ggplot() + 
+  geom_smooth(aes(x=Date, y=World_Infections, color="World Infections")) +
+  geom_smooth(aes(x=Date, y=World_Deaths, color="World Deaths")) +
+  labs(y="Doubling Time in Days")
+```
+
+## With Confidence Intervals
+### US
+```{r}
+covid_infection_folding %>%
+  ggplot() + 
+  geom_point(aes(x=Date, y=US_Infections, color="US Infections")) +
+  geom_point(aes(x=Date, y=US_Deaths, color="US Deaths")) +
+  geom_smooth(
+    data=covid_infection_folding,
+    mapping=aes(x=Date, y=US_Infections, ymin=US_Infections_low, ymax=US_Infections_high, color="US Infections"),
+    stat="identity"
+    ) +
+  geom_smooth(
+    data=covid_infection_folding,
+    mapping=aes(x=Date, y=US_Deaths, ymin=US_Deaths_low, ymax=US_Deaths_high, color="US Deaths"),
+    stat="identity"
+    ) + 
+  labs(
+    y="US Covid-19 Doubling Time (Days)",
+    title="Doubling Time (95% confidence intervals)",
+    subtitle="Based on purevious 7 days"
+  )
+```
+### World
+```{r}
+covid_infection_folding %>%
+  ggplot() + 
+  geom_point(aes(x=Date, y=World_Infections, color="World Infections")) +
+  geom_point(aes(x=Date, y=World_Deaths, color="World Deaths")) +
+  geom_smooth(
+    data=covid_infection_folding,
+    mapping=aes(x=Date, y=World_Infections, ymin=World_Infections_low, ymax=World_Infections_high, color="World Infections"),
+    stat="identity"
+    ) +
+  geom_smooth(
+    data=covid_infection_folding,
+    mapping=aes(x=Date, y=World_Deaths, ymin=World_Deaths_low, ymax=World_Deaths_high, color="World Deaths"),
+    stat="identity"
+    ) + 
+  # scale_x_date(date_breaks = "month", date_minor_breaks="day", date_labels="%b %e") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  labs(
+    y="Doubling Time (Days)",
+    title="World Covid-19 Doubling Time (2020)",
+    subtitle="Based on previous 7 days. 95% confidence intervals."
+  )
+```
+

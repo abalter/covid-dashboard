@@ -1,0 +1,233 @@
+---
+title: "Defence Contractor Stocks Before and After Solameini Assassination"
+Author: "Ariel Balter"
+output:
+  html_notebook:
+    df_print: paged
+    number_sections: yes
+    theme: lumen
+    toc: yes
+    code_folding: hide
+---
+
+
+# Load Libraries
+```{r}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(quantmod)
+library(plotly)
+```
+
+# Sources
+https://247wallst.com/special-report/2018/07/02/americas-15-biggest-defense-contractors/3/
+https://www.usatoday.com/story/money/2019/02/21/military-spending-defense-contractors-profiting-from-war-weapons-sales/39092315/
+https://investingnews.com/top-defense-contractors/
+
+# Set Date Range
+```{r}
+from = '2019-12-02'
+to = '2020-02-06'
+```
+
+
+# Defined Stock Ticker Symbols
+```{r}
+contractor_tickers = list(
+  Blackwater='BLK',
+  Lockheed_Martin='LMT',
+  Boeing='BA',
+  Raytheon='RTN',
+  General_Dynamics='GD',
+  Northrop_Grummon='NOC',
+  United_Technologies='UTX',
+  BAE_Systems='BAESY',
+  Halliburton='HAL',
+  Huntington_Ingalls='HII',
+  # McKesson_Corp='MCK',
+  # Honeywell='HON',
+  L3_Harris='LHX',
+  # Leidos='LDOS',
+  Booz_Allen_Hamilton='BAH'
+)
+
+index_tickers = list(
+  NASDAQ='^IXIC',
+  Dow_Jones='^DJI',
+  SnP_500='^GSPC'
+)
+```
+
+# Get Stock Price Data
+```{r}
+for (ticker in c(contractor_tickers, index_tickers))
+{
+  getSymbols(ticker, from=from, to=to)
+}
+```
+
+# Create Empty Data Table
+```{r}
+
+### data frame template
+ticker_metadata = data.frame(
+  Ticker=character(),
+  CompanyName=character(),
+  Category=character(),
+  Varname=character()
+  )
+
+### Add contractor names
+for (contractor_name in names(contractor_tickers))
+{
+  print(contractor_name)
+  ticker = contractor_tickers[[contractor_name]]
+  varname = gsub('\\^', '', ticker)
+
+  ticker_metadata %<>%
+    add_row(
+      Ticker=ticker, 
+      CompanyName=contractor_name, 
+      Varname=varname,
+      Category='Contractor'
+      )
+}
+
+### Add ticker names
+for (index_name in names(index_tickers))
+{
+  print(index_name)
+  ticker = index_tickers[[index_name]]
+  varname = gsub('\\^', '', ticker)
+
+  ticker_metadata %<>%
+    add_row(
+      Ticker=ticker,
+      CompanyName=index_name,
+      Varname=varname,
+      Category='Index'
+      )
+}
+
+```
+
+# Fill data
+```{r}
+dates = seq(as.Date(from), as.Date(to), by='days')
+all_data = data.frame(Date = dates)
+
+# dates = all_data$Date
+
+for (ticker in ticker_metadata$Ticker)
+{
+  print(ticker)
+  
+  varname = 
+    ticker_metadata %>%
+    filter(Ticker==ticker) %>%
+    pull(Varname) %>%
+    as.character()
+  print(varname)
+
+  company_name = 
+    ticker_metadata %>%
+    filter(Ticker==ticker) %>%
+    pull(CompanyName) %>%
+    as.character()
+  print(company_name)
+    
+  closed_col = paste0(varname, '.Adjusted')
+  print(closed_col)
+  
+  ticker_data = 
+    get(varname) %>%
+    data.frame(stringsAsFactors = F) %>%
+    rownames_to_column('Date') %>%
+    mutate(Date = as.Date(Date)) %>%
+    select(Date, !!as.symbol(company_name) := closed_col)
+
+  # print(colnames(all_data))
+  # print(ticker_data)
+
+  all_data %<>% full_join(ticker_data, by='Date')
+}
+
+index_names = 
+  ticker_metadata %>% 
+  filter(Category=="Index") %>%
+  pull(CompanyName) %>%
+  as.character()
+
+contractor_names = 
+  ticker_metadata %>% 
+  filter(Category=="Contractor") %>%
+  pull(CompanyName) %>%
+  as.character()
+
+normalized_data =
+  all_data %>%
+  drop_na() %>%
+  # mutate_at(vars(-Date), ~./Dow_Jones ) %>%
+  mutate_at(vars(-Date), function(x) x/first(x)) %>%
+  # mutate_at(vars(-Date), function(x) x - first(x)) %>%
+  mutate(
+    ContractorAVG = select(., contractor_names) %>% rowMeans,
+    IndexAVG = select(., index_names) %>% rowMeans
+    ) %>%
+  # mutate_at(index_names, function(x) x - first(x)) %>%
+  # mutate_at(contractor_names, function(x) x - first(x)) %>%
+  mutate_at(vars(-Date), ~.-IndexAVG)
+  # select(everything())
+
+normalized_data = 
+  normalized_data %>%
+  select(-Boeing, -Halliburton, -General_Dynamics)
+
+tall_data = 
+  normalized_data %>%
+  gather(key=CompanyName, value=Closing, -Date) %>%
+  mutate(
+    Category = case_when(
+      CompanyName == 'Dow_Jones' ~ 'Index',
+      CompanyName == 'SnP_500' ~ 'Index',
+      CompanyName == 'NASDAQ' ~ 'Index',
+      CompanyName == 'IndexAVG' ~ 'Stat',
+      CompanyName == 'ContractorAVG' ~ 'Stat',
+      TRUE ~ 'Contractor'
+    )
+  )
+```
+
+# Plot
+```{r}
+tall_data %>%
+  drop_na() %>%
+  ggplot() +
+  geom_line(aes(
+    x=Date, 
+    y=Closing, 
+    color=CompanyName,
+    linetype=Category,
+    size=Category,
+    alpha=Category
+    )
+  ) +
+  scale_alpha_manual(
+    name="Category",
+    values=c(1, 0.8, 0.6),
+    breaks=c("Contractor", "Index", "Stat"),
+    labels = c("Contractor", "Index", "Stat")
+  ) +
+  scale_linetype_manual(
+    name="Category",
+    values=c("dotted", "dashed", "solid"),
+    labels = c("Contractor", "Index", "Stat")
+  ) +
+  scale_size_manual('Category', values=c(1, 2, 3)) +
+  scale_x_date(date_breaks = 'days') +
+  geom_vline(xintercept=as.numeric(as.Date('2020-01-02')), linetype=1) +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+
