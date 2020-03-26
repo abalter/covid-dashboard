@@ -1,3 +1,4 @@
+
 ---
 title: "Untitled"
 output: 
@@ -6,31 +7,192 @@ output:
     vertical_layout: fill
 ---
 
-```{r setup, include=FALSE}
+```{r, include=F}
 library(flexdashboard)
+library(rmarkdown)
+library(knitr)
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(gridExtra)
+library(broom)
 ```
 
-Column {data-width=650}
------------------------------------------------------------------------
+```{r, include=F}
+knitr::opts_chunk$set(
+  fig.width=12
+)
+```
 
-### Chart A
+```{r, include=F}
+covid_infections_raw = read.csv(
+  file=url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"),
+  header=T,
+  stringsAsFactors=F,
+  check.names = T
+)
+
+covid_deaths_raw = read.csv(
+  file=url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"),
+  header=T,
+  stringsAsFactors=F,
+  check.names = T
+)
+```
+
+```{r, include=F}
+covid_infections_world = 
+  covid_infections_raw %>%
+  select(starts_with("X")) %>%
+  summarize_all(sum) %>%
+  set_rownames('World') %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(
+    Date =  
+      str_remove(Date, "X") %>% 
+      as.Date(format="%m.%d.%y")
+  ) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  mutate(
+    days = as.numeric(Date)-as.numeric(min(Date))
+  )
+
+covid_deaths_world = 
+  covid_deaths_raw %>%
+  select(starts_with("X")) %>%
+  summarize_all(sum) %>%
+  set_rownames('World') %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(
+    Date =
+      str_remove(Date, "X") %>% 
+      as.Date(format="%m.%d.%y")
+  ) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  mutate(days=as.numeric(Date)-as.numeric(min(Date))) 
+
+covid_infections =
+  covid_infections_raw %>%
+  select(Country.Region, starts_with("X")) %>%
+  group_by(Country.Region) %>%
+  summarize_all(sum) %>%
+  mutate(Country.Region = make.names(Country.Region)) %>%
+  column_to_rownames("Country.Region") %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(Date =  str_remove(Date, "X") %>% as.Date(format="%m.%d.%y")) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  ### Add In World
+  inner_join(covid_infections_world, by="Date") %>%
+  mutate(
+    days = 
+      difftime(Date, min(Date), units="days") %>%
+      as.numeric()
+  )
+
+covid_deaths =
+  covid_deaths_raw %>%
+  select(Country.Region, starts_with("X")) %>%
+  group_by(Country.Region) %>%
+  summarize_all(sum) %>%
+  mutate(Country.Region = make.names(Country.Region)) %>%
+  column_to_rownames("Country.Region") %>%
+  ### Transpose to make countries the columns
+  t() %>%
+  data.frame(stringsAsFactors = F) %>%
+  rownames_to_column("Date") %>%
+  mutate(Date =  str_remove(Date, "X") %>% as.Date(format="%m.%d.%y")) %>%
+  mutate_at(vars(-Date), ~as.numeric(.)) %>%
+  ### Add In World
+  inner_join(covid_deaths_world, by="Date") %>%
+  mutate(
+    days = 
+      difftime(Date, min(Date), units="days") %>%
+      as.numeric()
+  )
+```
+
+
+About
+=====================================================================================
+
+Exponential Growth
+-------------------------------------------------------------------------------------
+
+
+Timeseries Data
+=====================================================================================
+
+Column {data-width=600}
+-------------------------------------------------------------------------------------
+
+### Infections
 
 ```{r}
+p1 = covid_infections %>%
+  filter(Date > as.Date('2020-03-10')) %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Infected", -Date) %>%
+  ggplot(aes(x=Date, y=Infected, color=Country)) +
+  # geom_line() + 
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10() +
+  geom_smooth(method='lm', se=F)
 
+p2 = covid_infections %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Infected", -Date) %>%
+  ggplot(aes(x=Date, y=Infected, color=Country)) +
+  geom_line() +
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10()
+
+grid.arrange(p1, p2,
+  top = sprintf("Covid 19 Infection Rates -- %s", Sys.Date())
+  )
 ```
 
-Column {data-width=350}
------------------------------------------------------------------------
 
-### Chart B
+### Deaths
 
-```{r}
+```{r, fig.width=12}
+p1 = covid_deaths %>%
+  filter(Date > as.Date('2020-03-10')) %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Deceased", -Date) %>%
+  ggplot(aes(x=Date, y=Deceased, color=Country)) +
+  # geom_line() + 
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10() +
+  geom_smooth(method='lm', se=F)
 
+p2 = covid_deaths %>%
+  select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
+  # mutate_at(vars(-Date), ~./max(.)) %>%
+  gather(key="Country", value="Deceased", -Date) %>%
+  ggplot(aes(x=Date, y=Deceased, color=Country)) +
+  geom_line() +
+  geom_point(alpha=0.4, size=1.5) +
+  scale_y_log10()
+
+grid.arrange(p1, p2,
+  top = sprintf("Covid 19 Death Rates -- %s", Sys.Date())
+  )
 ```
 
-### Chart C
+#### What does this do
+What about this?
 
-```{r}
-
-```
-
+Doubling Time {.tabset}
+===========================================================================
