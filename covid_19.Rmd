@@ -133,7 +133,8 @@ p1 = covid_infections %>%
   # geom_line() + 
   geom_point(alpha=0.4, size=1.5) +
   scale_y_log10() +
-  geom_smooth(method='lm', se=F)
+  geom_smooth(method='lm', se=F)  + 
+  scale_x_date(date_breaks = "day", date_minor_breaks="day", date_labels="%b %e") 
 
 p2 = covid_infections %>%
   select("Date", "US", "Italy", "Spain", "France", "Iran", "World") %>%
@@ -142,7 +143,8 @@ p2 = covid_infections %>%
   ggplot(aes(x=Date, y=Infected, color=Country)) +
   geom_line() +
   geom_point(alpha=0.4, size=1.5) +
-  scale_y_log10()
+  scale_y_log10()  + 
+  scale_x_date(date_breaks = "3 days", date_minor_breaks="day", date_labels="%b %e") 
 
 grid.arrange(p1, p2,
   top = sprintf("Covid 19 Infection Rates -- %s", Sys.Date())
@@ -242,7 +244,7 @@ getRunningDoublingTime = function(
 
 ## Assemble Data
 ```{r}
-lag = 10
+lag = 7
 
 from = "2020-03-10"
 # to = "2020-03-27"
@@ -318,26 +320,6 @@ covid_infection_folding %>%
   geom_smooth(aes(x=Date, y=World_Deaths, color="World Infection Doubling Time"))
 ```
 
-## US Infections and Deaths
-```{r}
-covid_infection_folding %>%
-  ggplot() + 
-  geom_point(aes(x=Date, y=US_Infections, color="US Infections")) +
-  geom_point(aes(x=Date, y=US_Deaths, color="US Deaths")) + 
-  geom_smooth(aes(x=Date, y=US_Infections, color="US Infections")) +
-  geom_smooth(aes(x=Date, y=US_Deaths, color="US Deaths")) +
-  labs(y="Doubling Time in Days")
-```
-
-## World Infections and Deaths
-```{r}
-covid_infection_folding %>%
-  ggplot() + 
-  geom_smooth(aes(x=Date, y=World_Infections, color="World Infections")) +
-  geom_smooth(aes(x=Date, y=World_Deaths, color="World Deaths")) +
-  labs(y="Doubling Time in Days")
-```
-
 ## With Confidence Intervals
 ### US
 ```{r}
@@ -360,7 +342,7 @@ us_doubling_confint = covid_infection_folding %>%
   labs(
     y="Doubling Time (Days)",
     title="US Covid-19 Doubling Time (95% confidence intervals)",
-    subtitle=sprintf("Based on purevious %d days", lag)
+    subtitle=sprintf("Based on previous %d days", lag)
   )
 
 print(us_doubling_confint)
@@ -387,7 +369,7 @@ world_doubling_confint = covid_infection_folding %>%
   labs(
     y="Doubling Time (Days)",
     title="World COVID-19 Doubling Time (95% confidence intervals)",
-    subtitle=sprintf("Based on purevious %d days", lag)
+    subtitle=sprintf("Based on previous %d days", lag)
   )
 
 print(world_doubling_confint)
