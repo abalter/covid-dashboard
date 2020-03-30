@@ -1,0 +1,38 @@
+---
+title: "Storyboard Showcase"
+output: 
+  flexdashboard::flex_dashboard:
+    storyboard: TRUE
+    source: embed
+---
+
+```{r setup, include=FALSE}
+startCondaEnv('flexdash')
+knitr::opts_chunk$set(echo = FALSE)
+library(plotly)
+library(flexdashboard)
+```
+
+
+### Including Plots, sometimes they have interesting data and other times its this weird graph
+
+```{r}
+p <- plot_ly(midwest, x = ~percollege, color = ~state, type = "box")
+p
+```
+
+- This is a fun example of a graph for which I do not know what the data means
+
+### Plotly will not give you a virus if you click it, I swear
+    
+```{r}
+library(plotly)
+p <- ggplot(data = diamonds, aes(x = cut, fill = clarity)) +
+            geom_bar(position = "dodge")
+ggplotly(p)
+```
+
+- This is a fun example of a graph for which I do not know what the data means
+- This one is interactive and I think that is cool
+    
+

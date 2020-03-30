@@ -242,10 +242,11 @@ getRunningDoublingTime = function(
 
 ## Assemble Data
 ```{r}
-lag = 14
+lag = 10
 
-from = "2020-03-14"
-to = "2020-03-24"
+from = "2020-03-10"
+# to = "2020-03-27"
+to = Sys.Date()
 
 covid_infection_folding = data.frame(
   Date = seq(as.Date(from), as.Date(to), by="day")
@@ -340,7 +341,7 @@ covid_infection_folding %>%
 ## With Confidence Intervals
 ### US
 ```{r}
-covid_infection_folding %>%
+us_doubling_confint = covid_infection_folding %>%
   ggplot() + 
   geom_point(aes(x=Date, y=US_Infections, color="US Infections")) +
   geom_point(aes(x=Date, y=US_Deaths, color="US Deaths")) +
@@ -354,15 +355,20 @@ covid_infection_folding %>%
     mapping=aes(x=Date, y=US_Deaths, ymin=US_Deaths_low, ymax=US_Deaths_high, color="US Deaths"),
     stat="identity"
     ) + 
+  scale_x_date(date_breaks = "day", date_minor_breaks="day", date_labels="%b %e") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
   labs(
-    y="US Covid-19 Doubling Time (Days)",
-    title="Doubling Time (95% confidence intervals)",
-    subtitle="Based on purevious 7 days"
+    y="Doubling Time (Days)",
+    title="US Covid-19 Doubling Time (95% confidence intervals)",
+    subtitle=sprintf("Based on purevious %d days", lag)
   )
+
+print(us_doubling_confint)
 ```
+
 ### World
 ```{r}
-covid_infection_folding %>%
+world_doubling_confint = covid_infection_folding %>%
   ggplot() + 
   geom_point(aes(x=Date, y=World_Infections, color="World Infections")) +
   geom_point(aes(x=Date, y=World_Deaths, color="World Deaths")) +
@@ -376,12 +382,66 @@ covid_infection_folding %>%
     mapping=aes(x=Date, y=World_Deaths, ymin=World_Deaths_low, ymax=World_Deaths_high, color="World Deaths"),
     stat="identity"
     ) + 
-  # scale_x_date(date_breaks = "month", date_minor_breaks="day", date_labels="%b %e") + 
+  scale_x_date(date_breaks = "day", date_minor_breaks="day", date_labels="%b %e") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
   labs(
     y="Doubling Time (Days)",
-    title="World Covid-19 Doubling Time (2020)",
-    subtitle="Based on previous 7 days. 95% confidence intervals."
+    title="World COVID-19 Doubling Time (95% confidence intervals)",
+    subtitle=sprintf("Based on purevious %d days", lag)
+  )
+
+print(world_doubling_confint)
+```
+
+```{r}
+grid.arrange(
+  us_doubling_confint, 
+  world_doubling_confint,
+  ncol = 2,
+  top = sprintf("COVID 19 Doubling Times -- %s", Sys.Date())
   )
 ```
 
+
+
+Using flexdashboard
+https://rmarkdown.rstudio.com/flexdashboard/using.html#storyboards
+
+Using flexdashboard
+https://rmarkdown.rstudio.com/flexdashboard/using.html#page_icons
+
+Sample flexdashboard Layouts
+https://rmarkdown.rstudio.com/flexdashboard/layouts.html#multiple_pages
+
+flexdashboard Examples
+https://rmarkdown.rstudio.com/flexdashboard/examples.html
+
+Using flexdashboard
+https://rmarkdown.rstudio.com/flexdashboard/using.html#tabsets
+
+1*3Pz0TmNq_gpGVd2xqxfeIQ.png (PNG Image, 1366 × 728 pixels) - Scaled (93%)
+https://miro.medium.com/max/3036/1*3Pz0TmNq_gpGVd2xqxfeIQ.png
+
+Building an HR Dashboard in R using Flexdashboard - Towards Data Science
+https://towardsdatascience.com/building-an-hr-dashboard-in-r-using-flexdashboard-76d14ed3f32
+
+flexdashboard/htmlwidgets-showcase-storyboard.Rmd at master · rstudio/flexdashboard
+https://github.com/rstudio/flexdashboard/blob/master/inst/examples/htmlwidgets-showcase-storyboard.Rmd
+
+Getting started with flexdashboards in R | STATWORX
+https://www.statworx.com/at/blog/getting-started-with-flexdashboards-in-r/
+
+Storyboard Showcase
+http://rstudio-pubs-static.s3.amazonaws.com/259632_a7c392438653473b8cb0df8f035c4bdb.html
+
+Working on a Workout · Len Kiefer
+http://lenkiefer.com/2017/01/18/working-on-a-workout/
+
+Housing’s best year in a decade by @lenkiefer
+http://lenkiefer.com/chartbooks/jan2017/review2016sidebar.html#
+
+Housing’s best year in a decade by @lenkiefer
+http://lenkiefer.com/chartbooks/jan2017/review2016sidebar.html#
+
+Housing market dashboard by @lenkiefer
+http://lenkiefer.com/chartbooks/jan2017/housing-market-dashboard-jan2017.html#
